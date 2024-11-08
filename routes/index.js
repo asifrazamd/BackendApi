@@ -1,71 +1,103 @@
 // Import required modules
-const express = require('express'); // Import Express to create the router
+const express = require('express');
+const dotenv = require('dotenv');
 const bcrypt = require('bcrypt'); // Import bcrypt to hash passwords
-const router = express.Router(); // Create a new router instance
 const db = require('../config/db'); // Import the MySQL database configuration
+const router = express.Router();
+dotenv.config();
 
 // Main route to handle the home page logic
 router.get('/', async (req, res) => {
-  // Check if the user is authenticated using Auth0
   const isAuthenticated = req.oidc.isAuthenticated();
   const user = isAuthenticated ? req.oidc.user : null;
 
-  // If user is authenticated, proceed to check or update user information in the database
   if (isAuthenticated && user) {
-    const { sub: auth0Id, name, email } = user; // Extract user information from Auth0 token
-
-    // Generate a hashed password (for demonstration, using Auth0 ID as a password placeholder)
-    const hashedPassword = await bcrypt.hash(auth0Id, 10); // Ideally, use a real password from user input
+    const { sub: auth0Id, name, email, role } = user; // Extract role from Auth0 user object
+    const hashedPassword = await bcrypt.hash(auth0Id, 10); // Normally you'd get this from user input
 
     try {
-      // Query the database to check if the user exists by Auth0 ID
       const [results] = await db.execute('SELECT * FROM users1 WHERE auth0_id = ?', [auth0Id]);
+      let userRole = 'user'; // Default role
 
       if (results.length === 0) {
-        // If user does not exist, insert a new user into the database with a hashed password
+        // New user, insert into database
         await db.execute(
-          'INSERT INTO users1 (auth0_id, name, email, password) VALUES (?, ?, ?, ?)',
-          [auth0Id, name, email, hashedPassword]
+          'INSERT INTO users1 (auth0_id, name, email, password, role) VALUES (?, ?, ?, ?, ?)',
+          [auth0Id, name, email, hashedPassword, userRole]
         );
         console.log('New user added:', name);
       } else {
-        // If user exists, update their name, email, and password in the database
+        // Existing user, update details in the database
+        userRole = results[0].role; // Existing role
         await db.execute(
           'UPDATE users1 SET name = ?, email = ?, password = ? WHERE auth0_id = ?',
           [name, email, hashedPassword, auth0Id]
         );
         console.log('User updated:', name);
       }
-    } catch (error) {
-      console.error('Error while interacting with the database:', error); // Log database errors
-      return res.status(500).send('Internal Server Error'); // Send error response
-    }
-  }
 
-  // Render a response based on the authentication status of the user
-  res.send(`
-    ${isAuthenticated ? `
-      <h2>Welcome, ${user.name}!</h2>
-      <img src="${user.picture}" alt="${user.name}" style="border-radius: 50%;" width="100" height="100" />
-      <p><a href="/logout">logout</a> to log out.</p>
-    ` : `
-      <p><a href="/login">login</a> to log in.</p>
-    `}
-  `);
+      // Redirect based on role
+      if (role == 'admin') {
+        return res.redirect('/admin');
+      } else {
+        return res.redirect('/user'); // Or whatever the default page is for regular users
+      }
+    } catch (error) {
+      console.error('Error interacting with the database:', error);
+      return res.status(500).send('Internal Server Error');
+    }
+  } else {
+    // If not authenticated, show a login link
+    res.send(`
+      <p>You are not logged in. <a href="/login">Login</a> to continue.</p>
+    `);
+  }
 });
 
-// Login route - redirects user to the Auth0 login page
+// Login route (this redirects the user to Auth0 for login)
 router.get('/login', (req, res) => {
   res.oidc.login();
 });
 
-// Logout route - logs the user out and redirects them to the home page
+// Logout route (logs out user and redirects to home)
 router.get('/logout', (req, res) => {
-  //res.oidc.logout({ returnTo: 'http://localhost:4000' });
-  res.logout();
-  //res.redirect('/login');
+  res.oidc.logout({ returnTo: 'http://localhost:4000' });  // Redirect to home after logout
 });
 
-module.exports = router; // Export the router for use in app.js
+// Admin route (only accessible to users with the "admin" role)
+router.get('/admin', async (req, res) => {
+  // Ensure user is authenticated
+  if (req.oidc.isAuthenticated()) {
+    const userId = req.oidc.user.sub;  // Extract the Auth0 ID (sub) from the authenticated user
 
+    try {
+      // Query the database to get the user data based on Auth0 ID
+      const [results] = await db.execute('SELECT * FROM users1 WHERE auth0_id = ?', [userId]);
 
+      // Check if the user exists and their role is "admin"
+      if (results.length > 0 && results[0].role == 'admin') {
+        res.send('<h2>Welcome to the Admin Panel</h2><p><a href="/logout">Logout</a></p>');
+      } else {
+        // User exists but is not an admin, or does not exist
+        res.status(403).send('Access denied');
+      }
+    } catch (error) {
+      console.error('Error fetching user from the database:', error);
+      res.status(500).send('Internal Server Error');
+    }
+  } else {
+    // User is not authenticated
+    res.status(401).send('Unauthorized');
+  }
+});
+
+// User route (default user page)
+router.get('/user', (req, res) => {
+  if (req.oidc.isAuthenticated()) {
+    res.send('<h2>Welcome User</h2><p><a href="/logout">Logout</a></p>');
+  } else {
+    res.status(403).send('Access denied');
+  }
+});
+
+module.exports = router;  // Export the router for use in your app

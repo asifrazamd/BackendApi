@@ -1,8 +1,11 @@
 // Import required modules
 const express = require('express'); // Express framework for creating a server
+const dotenv=require("dotenv")
 const { auth } = require('express-openid-connect'); // Auth0 middleware for authentication
 const authConfig = require('./config/auth'); // Auth0 configuration file
 const routes = require('./routes'); // Custom route handlers
+dotenv.config();
+
 
 const app = express(); // Initialize the Express app
 
