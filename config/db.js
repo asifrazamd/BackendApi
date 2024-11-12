@@ -1,17 +1,18 @@
 // Import the mysql2 library, which provides MySQL database functions
 const mysql = require('mysql2');
-const dotenv=require("dotenv")
+const dotenv = require("dotenv");
 
+// Load environment variables from a .env file, making sensitive information secure
 dotenv.config();
 
-// Create a MySQL connection pool for efficient database management
-/*const pool = mysql.createPool({
-  host: 'localhost',      // Database host (usually 'localhost' for local dev)
-  user: 'root',           // Database username
-  password: 'root',       // Database password
-  database: 'mydb'        // Name of the database to connect to
-});*/
-
+/**
+ * Creates a MySQL connection pool, using parameters defined in environment variables.
+ * 
+ * - host: Database host address (e.g., 'localhost' or an IP address).
+ * - user: Database user with access privileges.
+ * - password: Password for the database user.
+ * - database: Name of the specific database to connect to.
+ */
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -19,8 +20,18 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME
 });
 
-// Promisify the pool's query methods, allowing async/await for cleaner async code
+/**
+ * Converts the pool's query methods to return promises.
+ * 
+ * This makes database queries more manageable by allowing the use of async/await syntax,
+ * instead of relying on callback functions. It provides a cleaner, more readable structure
+ * for handling asynchronous database queries.
+ */
 const promisePool = pool.promise();
 
-// Export the promisified pool to be used for database queries throughout the app
+/**
+ * Exports the promisified pool, making it accessible across the application for executing 
+ * SQL queries. Any module importing this file can use `promisePool` to interact with the 
+ * MySQL database using async/await syntax.
+ */
 module.exports = promisePool;
